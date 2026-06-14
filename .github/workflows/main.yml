@@ -2,19 +2,45 @@ name: CICD
 
 on:
   push:
-    branches: [main,master]
-    
+    branches: [main, master]
+
 jobs:
   build:
-    runs-on: [ubuntu-latest]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Source
         uses: actions/checkout@v3
-      - name: Set Node.js 16.x
-        uses: actions/setup-node@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
         with:
-          node-version: 16.x
-      - name: Install Dependencies
-        run : npm install
-      - name: Test Project
-        run: npm test
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build Docker Image
+        run: docker build -t ibnyassen/nodejs-app:latest .
+
+      - name: Push Docker Image
+        run: docker push ibnyassen/nodejs-app:latest
+
+  deploy:
+    needs: build
+    runs-on: self-hosted
+    steps:
+      - name: Pull Image
+        run: docker pull ibnyassen/nodejs-app:latest
+
+      - name: Stop Old Container
+        run: docker stop nodejs-app || true
+
+      - name: Remove Old Container
+        run: docker rm nodejs-app || true
+
+      - name: Run Container
+        run: |
+          docker run -d \
+            -p 4000:4000 \
+            --name nodejs-app \
+            --restart unless-stopped \
+            -e MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }} \
+            ibnyassen/nodejs-app:latest
